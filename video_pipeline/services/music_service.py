@@ -1,3 +1,5 @@
+from pathlib import Path
+
 class MusicService:
     async def generate_and_cut_music(self, summary: str, target_duration: float, job_id: str, title: str):
         """生成音樂並 cut 到指定長度"""

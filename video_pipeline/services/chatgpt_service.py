@@ -3,9 +3,36 @@ ChatGPT API 服務
 """
 import openai
 import json
+import re
 from typing import List, Dict, Any
 from config import settings
 from models import TranscriptSentence, SyllableData, UnifiedData, SentenceWithClips, Clip
+
+class SyllableCounter:
+    """
+    A lightweight heuristic syllable counter used to estimate syllable counts from text.
+    It counts vowel groups as syllables and applies simple adjustments (e.g., silent 'e').
+    This is not perfect but is sufficient for duration estimation in the pipeline.
+    """
+    VOWEL_GROUP_RE = re.compile(r"[aeiouy]+", re.IGNORECASE)
+    WORD_RE = re.compile(r"[A-Za-z\u00C0-\u017F]+", re.IGNORECASE)
+
+    def count_syllables(self, text: str) -> int:
+        if not text:
+            return 0
+        syllables = 0
+        words = self.WORD_RE.findall(text)
+        for w in words:
+            groups = self.VOWEL_GROUP_RE.findall(w)
+            count = len(groups)
+            # Heuristic: subtract one for a trailing silent 'e' when there is more than one vowel group
+            if w.lower().endswith("e") and count > 1:
+                count -= 1
+            # Ensure at least one syllable per word
+            if count <= 0:
+                count = 1
+            syllables += count
+        return syllables
 
 
 class ChatGPTService:
