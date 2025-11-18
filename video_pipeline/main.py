@@ -1,6 +1,20 @@
 """
 AI Video Production Pipeline API
-完整流程：video → transcript → rewrite → image gen → video gen → TTS → music → assembly
+
+檔案說明（File description）:
+    - 本檔為整個 AI 影片製作流程的 API 入口。
+    - 流程範例：video -> transcription -> rewrite -> image generation -> video generation -> TTS -> music -> assembly
+    - 此檔提供 HTTP endpoint 以啟動與查詢 pipeline 作業（在簡易範例中 job 狀態儲存在記憶體）
+
+File description (English):
+    - This module exposes FastAPI endpoints to start and monitor an AI video production pipeline.
+    - Typical pipeline: video -> transcript -> script rewrite -> image generation -> video generation -> TTS -> music -> final assembly
+    - Jobs are stored in an in-memory dict for simplicity; production should use Redis/DB for persistence.
+
+注意 / Notes:
+    - Imports like `from services...` assume this module runs with the project root on `PYTHONPATH`.
+      If you run via `python -m video_pipeline.main` or with a proper package entry, imports should resolve.
+    - 目前以 in-memory `jobs` 儲存狀態；多人或多程序部署時請改用共享儲存（Redis/DB）。
 """
 
 from fastapi import FastAPI, File, UploadFile, BackgroundTasks, HTTPException
@@ -56,6 +70,9 @@ async def start_pipeline(
         content = await file.read()
         f.write(content)
     
+    # 注意：此處將整個上傳檔讀入記憶體，對大檔案可能會造成記憶體壓力。
+    # Note: reading the whole uploaded file into memory may cause high memory usage for large files.
+    
     # 初始化 job 狀態
     jobs[job_id] = {
         "status": "started",
@@ -68,6 +85,8 @@ async def start_pipeline(
     }
     
     # 背景執行
+    # BackgroundTasks 可以接受 coroutine function；FastAPI/Starlette 會將其排程執行。
+    # BackgroundTasks accepts coroutine functions; Starlette will schedule them on the event loop.
     background_tasks.add_task(run_pipeline, job_id, str(video_path), title)
     
     return {"job_id": job_id, "message": "Pipeline started"}
@@ -85,6 +104,9 @@ async def run_pipeline(job_id: str, video_path: str, title: str):
     """
     主 pipeline 流程
     """
+    # NOTE: Each service used below (VideoProcessor, TranscriptionService, etc.)
+    # should implement appropriate error handling and timeouts.
+    # 如果希望更細緻的錯誤回復/重試策略，可在各服務或此處加入 retry 機制。
     try:
         # 1. 影片預處理
         jobs[job_id]["current_step"] = "video_processing"
@@ -220,21 +242,30 @@ async def rewrite_script_with_retry(
     """
     改寫 script 並檢查發音數，最多重試 10 次
     """
-    target_sps = syllable_data["syllables_per_sec"]
+    # 健全性檢查：避免除以零（duration 或 target_sps 為 0）
     counter = SyllableCounter()
-    
+    target_sps = syllable_data.get("syllables_per_sec", 0)
+    duration_safe = duration if (duration and duration > 0) else 1e-6
+
     for attempt in range(max_attempts):
         new_script = await chatgpt.rewrite_script(transcript, syllable_data)
-        
+
         # 計算新 script 發音數
         new_syllables = counter.count_script(new_script)
-        new_sps = new_syllables / duration
-        
-        diff_pct = abs(new_sps - target_sps) / target_sps
-        
+        new_sps = new_syllables / duration_safe
+
+        # 如果 target_sps 為 0，無法以相對比例比較，改採絕對判斷（若雙方皆為 0 則視為通過）
+        if target_sps == 0:
+            if new_syllables == 0:
+                return new_script
+            else:
+                diff_pct = float("inf")
+        else:
+            diff_pct = abs(new_sps - target_sps) / target_sps
+
         if diff_pct <= 0.1:  # 差異 <= 10%
             return new_script
-        
+
         # 差太多，要求調整
         feedback = f"發音數差 {diff_pct*100:.1f}%，目標 {target_sps:.2f}/s，你給 {new_sps:.2f}/s"
         jobs[job_id]["warnings"].append(f"Attempt {attempt+1}: {feedback}")
