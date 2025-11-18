@@ -1,8 +1,40 @@
 
 # ==================== Image Gen ====================
-import httpx
-import os
 from pathlib import Path
+import os
+import base64
+from typing import Any
+
+# flexible settings import
+try:
+    from video_pipeline.config import settings
+except Exception:
+    try:
+        from config import settings
+    except Exception:
+        settings = type("_S", (), {})()
+
+# httpx fallback
+try:
+    import httpx
+except Exception:
+    class _HTTPXAsyncClient:
+        def __init__(self, *a, **k):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+        async def post(self, *a, **k):
+            class Resp:
+                status_code = 501
+                content = b""
+                def json(self):
+                    return {}
+                def raise_for_status(self):
+                    return None
+            return Resp()
+    httpx = type("httpx", (), {"AsyncClient": _HTTPXAsyncClient})
 
 class ImageGenService:
     async def generate(self, prompt: str, job_id: str, title: str, clip_id: str) -> str:

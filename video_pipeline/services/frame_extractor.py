@@ -6,6 +6,15 @@
 import subprocess
 from pathlib import Path
 
+# flexible settings import (not required but kept for consistency)
+try:
+    from video_pipeline.config import settings
+except Exception:
+    try:
+        from config import settings
+    except Exception:
+        settings = type("_S", (), {})()
+
 class FrameExtractor:
     async def extract_frames_per_sentence(
         self, video_path: str, sentences, fps: float, job_id: str, title: str

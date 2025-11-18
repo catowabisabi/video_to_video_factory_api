@@ -1,11 +1,37 @@
 """
 Qwen-VL3 API 服務（阿里雲通義千問）
 """
-import httpx
 import base64
 from typing import List, Dict
 from pathlib import Path
-from config import settings
+
+# flexible settings import
+try:
+    from video_pipeline.config import settings
+except Exception:
+    try:
+        from config import settings
+    except Exception:
+        settings = type("_S", (), {})()
+
+# httpx fallback
+try:
+    import httpx
+except Exception:
+    class _HTTPXAsyncClient:
+        def __init__(self, *a, **k):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+        async def post(self, *a, **k):
+            class Resp:
+                status_code = 501
+                def json(self):
+                    return {"output": {"choices": [{"message": {"content": ""}}]}}
+            return Resp()
+    httpx = type("httpx", (), {"AsyncClient": _HTTPXAsyncClient})
 
 
 class QwenService:

@@ -6,6 +6,15 @@ import re
 from typing import List
 from models import TranscriptSentence, SyllableData
 
+# flexible settings import (not required but keep consistent)
+try:
+    from video_pipeline.config import settings
+except Exception:
+    try:
+        from config import settings
+    except Exception:
+        settings = type("_S", (), {})()
+
 
 class SyllableCounter:
     

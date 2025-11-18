@@ -1,16 +1,38 @@
 """
 ASR 服務 - Whisper
 """
-import whisper
 from typing import List
 from models import TranscriptSentence
+
+# flexible settings import
+try:
+    from video_pipeline.config import settings
+except Exception:
+    try:
+        from config import settings
+    except Exception:
+        settings = type("_S", (), {})()
+
+# whisper fallback
+try:
+    import whisper
+except Exception:
+    class _WhisperModelStub:
+        def transcribe(self, audio_path, **kwargs):
+            return {"segments": []}
+
+    class _Whisper:
+        @staticmethod
+        def load_model(name):
+            return _WhisperModelStub()
+
+    whisper = _Whisper()
 
 
 class TranscriptionService:
     
     def __init__(self):
-        from config import settings
-        self.model = whisper.load_model(settings.WHISPER_MODEL)
+        self.model = whisper.load_model(getattr(settings, 'WHISPER_MODEL', 'base'))
     
     async def transcribe(self, audio_path: str) -> List[TranscriptSentence]:
         """

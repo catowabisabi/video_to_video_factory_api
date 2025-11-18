@@ -1,3 +1,16 @@
+from pathlib import Path
+import subprocess
+
+# flexible settings import
+try:
+    from video_pipeline.config import settings
+except Exception:
+    try:
+        from config import settings
+    except Exception:
+        settings = type("_S", (), {})()
+
+
 class VideoGenService:
     async def generate_clips(self, images_result: dict, job_id: str, title: str):
         """圖生 3 秒影片（Runway / Pika / 自己 ComfyUI）"""
