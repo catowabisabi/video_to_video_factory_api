@@ -3,7 +3,34 @@
 """
 from typing import Optional
 from pathlib import Path
-from pydantic_settings import BaseSettings
+import os
+
+# Try to import BaseSettings from pydantic-settings (v2); fall back to pydantic.BaseSettings or a minimal stub.
+try:
+    from pydantic_settings import BaseSettings
+    _HAVE_PYDANTIC = True
+except Exception:
+    try:
+        from pydantic import BaseSettings
+        _HAVE_PYDANTIC = True
+    except Exception:
+        _HAVE_PYDANTIC = False
+
+        class BaseSettings:  # minimal fallback to allow simple env/default behaviour
+            def __init__(self, **kwargs):
+                ann = getattr(self.__class__, '__annotations__', {})
+                for name, _typ in ann.items():
+                    # Prefer explicit kwargs, then environment, then class default
+                    if name in kwargs:
+                        value = kwargs[name]
+                    else:
+                        # try environment variable
+                        env_val = os.getenv(name)
+                        if env_val is not None:
+                            value = env_val
+                        else:
+                            value = getattr(self.__class__, name, None)
+                    setattr(self, name, value)
 
 
 class Settings(BaseSettings):
